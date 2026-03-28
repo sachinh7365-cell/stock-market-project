@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Trend Prediction</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: black;
+            color: white;
+        }
+        .container {
+            max-width: 1200px;
+            margin-top: 50px;
+        }
+        .chart-container {
+            margin-top: 30px;
+        }
+        .table-responsive {
+            margin-top: 20px;
+        }
+        .download-link {
+            margin-top: 20px;
+        }
+        h1, h3 {
+            color: white;
+        }
+        label {
+            color: white;
+        }
+        .table {
+            color: white;
+            border-color: #555;
+        }
+        .table thead th {
+            background-color: #1a1a1a;
+            border-color: #555;
+        }
+        .table tbody td {
+            border-color: #555;
+        }
+        .search-form {
+            background-color: #1a1a1a;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        /* Make Recent Chats smaller */
+        #recentChatsDropdown,
+        #recentChatsDropdown + .dropdown-menu {
+            font-size: 0.85rem;
+        }
+        .recent-chats-label {
+            font-size: 1rem;
+            padding: 2px 0;
+        }
+        .mb-4.recent-chats-box {
+            margin-bottom: 10px !important;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar navbar-dark bg-dark border-bottom border-secondary">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{{ url_for('index') }}">
+                <span style="font-size: 24px;">📈</span> Stock Trend Prediction
+            </a>
+            <div class="d-flex align-items-center">
+                <span class="navbar-text me-3">
+                    Welcome, <strong>{{ user.username }}</strong>
+                </span>
+                <a href="{{ url_for('logout') }}" class="btn btn-outline-danger btn-sm">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h1 class="text-center mb-4">Stock Trend Prediction</h1>
+        
+        <!-- centered search bar -->
+        <div class="row justify-content-center mb-4">
+            <div class="col-md-6">
+                <div class="search-form">
+                    <form method="POST" action="{{ url_for('index') }}">
+                        <div class="input-group mb-3">
+                            <input type="text" class="form-control" id="stock" name="stock" placeholder="AAPL, MSFT, etc." value="{{ stock_ticker or '' }}">
+                            <button class="btn btn-primary" type="submit">Go</button>
+                        </div>
+                        <small class="text-muted">Search ticker symbol</small>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- left sidebar: history and favorites -->
+
+            <div class="col-xxl-2 col-xl-2 col-lg-3 col-md-3" style="flex: 0 0 20%; max-width: 20%;">
+                {% if recent_searches %}
+                <div class="mb-4 recent-chats-box">
+                    <label for="recentChatsDropdown" class="form-label recent-chats-label">Recent Chats</label>
+                    <div class="dropdown">
+                        <button class="btn btn-secondary dropdown-toggle w-100 text-start" type="button" id="recentChatsDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                            Select Recent Chat
+                        </button>
+                        <ul class="dropdown-menu w-100" aria-labelledby="recentChatsDropdown">
+                            {% for item in recent_searches %}
+                            <li>
+                                <a class="dropdown-item" href="{{ url_for('index', stock=item) }}">{{ item }}</a>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if favorites %}
+                <div class="mb-4">
+                    <h5>Favorites</h5>
+                    <ul class="list-unstyled">
+                        {% for fav in favorites %}
+                        <li>
+                            <a href="#" class="btn btn-sm btn-warning mb-1 w-100 text-start">{{ fav }}</a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- right main area: errors, charts, tables -->
+            <div class="col-xxl-10 col-xl-10 col-lg-9 col-md-9" style="flex: 0 0 80%; max-width: 80%;">
+                <!-- Error Message -->
+                {% if error %}
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    <strong>Error:</strong> {{ error }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+                {% endif %}
+
+                {% if plot_path_ema_20_50 %}
+                <div class="chart-container">
+                    <h3>Closing Price vs Time (20 & 50 Days EMA) - {{ stock_ticker }}</h3>
+                    <img src="{{ url_for('static', filename=plot_path_ema_20_50) }}" class="img-fluid" alt="EMA 20 & 50">
+                </div>
+                {% endif %}
+                
+                {% if plot_path_ema_100_200 %}
+                <div class="chart-container">
+                    <h3>Closing Price vs Time (100 & 200 Days EMA) - {{ stock_ticker }}</h3>
+                    <img src="{{ url_for('static', filename=plot_path_ema_100_200) }}" class="img-fluid" alt="EMA 100 & 200">
+                </div>
+                {% endif %}
+                
+                {% if plot_path_prediction %}
+                <div class="chart-container">
+                    <h3>Prediction vs Original Trend - {{ stock_ticker }}</h3>
+                    <img src="{{ url_for('static', filename=plot_path_prediction) }}" class="img-fluid" alt="Prediction vs Original">
+                </div>
+                {% endif %}
+                
+                {% if data_desc %}
+                <div class="table-responsive mt-4">
+                    <h3>Descriptive Statistics - {{ stock_ticker }}</h3>
+                    {{ data_desc | safe }}
+                </div>
+                {% endif %}
+                
+                {% if dataset_link %}
+                <div class="download-link">
+                    <a href="{{ url_for('download_file', filename=dataset_link.split('/')[-1]) }}" class="btn btn-success" download>Download Dataset (CSV)</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
