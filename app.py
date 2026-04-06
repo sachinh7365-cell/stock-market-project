@@ -1,5 +1,6 @@
 from bson import ObjectId
 import os
+from dotenv import load_dotenv
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -14,9 +15,12 @@ from flask_pymongo import PyMongo
 from werkzeug.security import generate_password_hash, check_password_hash
 from models import User as MongoUser
 
+# Load environment variables from .env file
+load_dotenv()
+
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your-secret-key-change-this-in-production'
-app.config['MONGO_URI'] = 'mongodb://localhost:27017/stock_prediction'
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-key-change-this-in-production')
+app.config['MONGO_URI'] = os.getenv('MONGO_URI', 'mongodb://localhost:27017/stock_prediction')
 mongo = PyMongo(app)
 
 # we delay importing Keras until we actually try to load a model;
@@ -239,7 +243,9 @@ def index():
                                      favorites=favorites, recent_searches=recent_searches, user=current_user)
             # Scaling data
             scaler = MinMaxScaler(feature_range=(0, 1))
-            data_training_array = scaler.fit_transform(data_training)
+            # Fit scaler on entire dataset to get proper min/max values
+            scaler.fit(df[['Close']])
+            data_training_array = scaler.transform(data_training)
             # Prepare data for prediction
             past_100_days = data_training.tail(100)
             final_df = pd.concat([past_100_days, data_testing], ignore_index=True)
@@ -254,7 +260,7 @@ def index():
             ax1.plot(df.index, df.Close, 'y', label='Closing Price')
             ax1.plot(df.index, ema20, 'g', label='EMA 20')
             ax1.plot(df.index, ema50, 'r', label='EMA 50')
-            ax1.set_title(f"Closing Price vs Time (20 & 50 Days EMA)\n(Last data: {df.index[-1].strftime('%Y-%m-%d')})")
+            ax1.set_title("Closing Price vs Time (20 & 50 Days EMA)")
             ax1.set_xlabel("Date")
             ax1.set_ylabel("Price")
             fig1.autofmt_xdate()
@@ -267,7 +273,7 @@ def index():
             ax2.plot(df.index, df.Close, 'y', label='Closing Price')
             ax2.plot(df.index, ema100, 'g', label='EMA 100')
             ax2.plot(df.index, ema200, 'r', label='EMA 200')
-            ax2.set_title(f"Closing Price vs Time (100 & 200 Days EMA)\n(Last data: {df.index[-1].strftime('%Y-%m-%d')})")
+            ax2.set_title("Closing Price vs Time (100 & 200 Days EMA)")
             ax2.set_xlabel("Date")
             ax2.set_ylabel("Price")
             fig2.autofmt_xdate()
@@ -277,41 +283,69 @@ def index():
             plt.close(fig2)
             # Make predictions (only if model is available)
             prediction_chart_path = None
+            # Make predictions (only if model is available)
+            prediction_chart_path = None
+            
             if model is not None:
-                y_predicted = model.predict(x_test)
-                # Inverse scaling for predictions
-                scaler_obj = scaler.scale_
-                scale_factor = 1 / scaler_obj[0]
-                y_predicted = y_predicted * scale_factor
-                y_test = y_test * scale_factor
+                y_predicted = model.predict(x_test, verbose=0)
+                # Flatten y_predicted if it's 2D
+                y_predicted = y_predicted.flatten()
+                
+                # Use actual original prices directly from data_testing
+                actual_prices = data_testing.values.flatten()
+                
+                # Inverse transform predictions from normalized [0,1] back to original price range
+                y_predicted_2d = y_predicted.reshape(-1, 1)
+                predicted_prices = scaler.inverse_transform(y_predicted_2d).flatten()
+                
+                # Ensure both arrays align with dates
+                min_len = min(len(actual_prices), len(predicted_prices))
+                plot_dates = data_testing.index[:min_len]
+                actual_plot = actual_prices[:min_len]
+                predicted_plot = predicted_prices[:min_len]
+                
                 # Plot 3: Prediction vs Original Trend
                 fig3, ax3 = plt.subplots(figsize=(12, 6))
-                ax3.plot(y_test, 'g', label="Original Price", linewidth = 1)
-                ax3.plot(y_predicted, 'r', label="Predicted Price", linewidth = 1)
+                ax3.plot(plot_dates, actual_plot, 'g', label="Original Price", linewidth=2.5)
+                ax3.plot(plot_dates, predicted_plot, 'r', label="Predicted Price", linewidth=2)
                 ax3.set_title("Prediction vs Original Trend")
-                ax3.set_xlabel("Time")
+                ax3.set_xlabel("Date")
                 ax3.set_ylabel("Price")
+                ax3.grid(True, alpha=0.3)
+                fig3.autofmt_xdate()
                 ax3.legend()
                 prediction_chart_path = f"static/{stock}_stock_prediction.png"
-                fig3.savefig(prediction_chart_path)
+                fig3.savefig(prediction_chart_path, bbox_inches='tight')
                 plt.close(fig3)
             else:
                 # Generate fake predictions for demo
                 y_predicted = y_test * 1.02  # Assume 2% increase
-                scaler_obj = scaler.scale_
-                scale_factor = 1 / scaler_obj[0]
-                y_predicted = y_predicted * scale_factor
-                y_test = y_test * scale_factor
+                
+                # Use actual original prices directly from data_testing
+                actual_prices = data_testing.values.flatten()
+                
+                # Inverse transform predictions from normalized [0,1] back to original price range
+                y_predicted_2d = y_predicted.reshape(-1, 1)
+                predicted_prices = scaler.inverse_transform(y_predicted_2d).flatten()
+                
+                # Ensure both arrays align with dates
+                min_len = min(len(actual_prices), len(predicted_prices))
+                plot_dates = data_testing.index[:min_len]
+                actual_plot = actual_prices[:min_len]
+                predicted_plot = predicted_prices[:min_len]
+                
                 # Plot 3: Prediction vs Original Trend
                 fig3, ax3 = plt.subplots(figsize=(12, 6))
-                ax3.plot(y_test, 'g', label="Original Price", linewidth = 1)
-                ax3.plot(y_predicted, 'r', label="Predicted Price", linewidth = 1)
+                ax3.plot(plot_dates, actual_plot, 'g', label="Original Price", linewidth=2.5)
+                ax3.plot(plot_dates, predicted_plot, 'r', label="Predicted Price", linewidth=2)
                 ax3.set_title("Prediction vs Original Trend (Demo)")
-                ax3.set_xlabel("Time")
+                ax3.set_xlabel("Date")
                 ax3.set_ylabel("Price")
+                ax3.grid(True, alpha=0.3)
+                fig3.autofmt_xdate()
                 ax3.legend()
                 prediction_chart_path = f"static/{stock}_stock_prediction.png"
-                fig3.savefig(prediction_chart_path)
+                fig3.savefig(prediction_chart_path, bbox_inches='tight')
                 plt.close(fig3)
             # Save dataset as CSV
             csv_file_path = f"static/{stock}_dataset.csv"
@@ -339,8 +373,14 @@ def download_file(filename):
 
 
 
-
 if __name__ == '__main__':
     # initialize model when running the server normally
     load_model_safely()
-    app.run(debug=True)
+    
+    # Get configuration from environment variables
+    port = int(os.getenv('PORT', 5000))
+    debug = os.getenv('DEBUG', 'False').lower() == 'true'
+    
+    # For production, use 0.0.0.0 to allow external connections
+    app.run(host='0.0.0.0', port=port, debug=debug)
+
